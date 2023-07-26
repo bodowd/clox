@@ -4,15 +4,20 @@
 
 #include "chunk.h"
 #include "memory.h"
+#include "value.h"
 
 void initChunk(Chunk *chunk) {
   chunk->count = 0;
   chunk->capacity = 0;
   chunk->code = NULL;
+  // when we initialize a new chunk, also initialize its constant list too
+  initValueArray(&chunk->constants);
 }
 
 void freeChunk(Chunk *chunk) {
   FREE_ARRAY(uint8_t, chunk->code, chunk->capacity);
+  // also free the constants when the chunk is freed
+  freeValueArray(&chunk->constants);
   // call initChunk here to zero out the fields leaving the chunk in a
   // well-defined empty state
   initChunk(chunk);
@@ -37,4 +42,12 @@ void writeChunk(Chunk *chunk, uint8_t byte) {
   // store the element and update count
   chunk->code[chunk->count] = byte;
   chunk->count++;
+}
+
+// write the constant value to the chunk's constant pool
+int addConstant(Chunk *chunk, Value value) {
+  writeValueArray(&chunk->constants, value);
+  // return the index where the constant was appended so that we can locate that
+  // same constant later
+  return chunk->constants.count - 1;
 }

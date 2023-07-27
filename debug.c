@@ -38,13 +38,14 @@ int disassembleInstruction(Chunk *chunk, int offset) {
   // print the byte offset of the given instruction
   // indicates where in the chunk this instruction is
   printf("offset: %04d...", offset);
+  int line = getLine(chunk, offset);
 
-  if (offset > 0 && chunk->lines[offset] == chunk->lines[offset - 1]) {
+  if (offset > 0 && line == getLine(chunk, offset - 1)) {
     // we show | for any instruction that comes from the same source line as the
     // preceding one
     printf("    | ");
   } else {
-    printf("line-number: %4d...", chunk->lines[offset]);
+    printf("line-number: %4d...", line);
   }
 
   // read a single byte from the bytecode at the given offset to get the opcode

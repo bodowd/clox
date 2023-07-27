@@ -10,6 +10,8 @@ void initChunk(Chunk *chunk) {
   chunk->count = 0;
   chunk->capacity = 0;
   chunk->code = NULL;
+  chunk->lineCount = 0;
+  chunk->lineCapacity = 0;
   chunk->lines = NULL;
   // when we initialize a new chunk, also initialize its constant list too
   initValueArray(&chunk->constants);
@@ -17,7 +19,7 @@ void initChunk(Chunk *chunk) {
 
 void freeChunk(Chunk *chunk) {
   FREE_ARRAY(uint8_t, chunk->code, chunk->capacity);
-  FREE_ARRAY(int, chunk->lines, chunk->capacity);
+  FREE_ARRAY(LineStart, chunk->lines, chunk->lineCapacity);
   // also free the constants when the chunk is freed
   freeValueArray(&chunk->constants);
   // call initChunk here to zero out the fields leaving the chunk in a
@@ -39,16 +41,32 @@ void writeChunk(Chunk *chunk, uint8_t byte, int line) {
     chunk->capacity = GROW_CAPACITY(oldCapacity);
     chunk->code =
         GROW_ARRAY(uint8_t, chunk->code, oldCapacity, chunk->capacity);
-    // when the code array grows, we also need to make the line number array
-    // grow
-    chunk->lines = GROW_ARRAY(int, chunk->lines, oldCapacity, chunk->capacity);
   }
 
   // store the element and update count
   chunk->code[chunk->count] = byte;
-  // store the line number
-  chunk->lines[chunk->count] = line;
   chunk->count++;
+
+  // see if we are still on the same line
+  if (chunk->lineCount > 0 && chunk->lines[chunk->lineCount - 1].line == line) {
+    return;
+  }
+
+  // grow the lines array if needed
+  if (chunk->lineCapacity < chunk->lineCount + 1) {
+    int oldCapacity = chunk->lineCapacity;
+    chunk->lineCapacity = GROW_CAPACITY(oldCapacity);
+    chunk->lines =
+        GROW_ARRAY(LineStart, chunk->lines, oldCapacity, chunk->lineCapacity);
+  }
+
+  // at this point, we know we aren't on the same line and we have enough
+  // room in the lines array
+  // add a new LineStart to the lines array and track the offset of the first
+  // byte of this line and the line number
+  LineStart *lineStart = &chunk->lines[chunk->lineCount++];
+  lineStart->offset = chunk->count - 1;
+  lineStart->line = line;
 }
 
 // write the constant value to the chunk's constant pool
@@ -57,4 +75,29 @@ int addConstant(Chunk *chunk, Value value) {
   // return the index where the constant was appended so that we can locate that
   // same constant later
   return chunk->constants.count - 1;
+}
+
+// binary search the lines array to find which LineStart contains the offset we
+// want, and thus which line contains that offset
+// Since our line numbers monotonically increase, binary search will work
+int getLine(Chunk *chunk, int offset) {
+  int start = 0;
+  int end = chunk->lineCount - 1;
+
+  for (;;) {
+    int mid = (start + end) / 2;
+    LineStart *line = &chunk->lines[mid];
+    if (offset < line->offset) {
+      end = mid - 1;
+    } else if (mid == chunk->lineCount - 1 ||
+               offset < chunk->lines[mid + 1].offset) {
+      // if we hit the end of the array or we find that the next offset from the
+      // one in LineStart array is bigger than the one we're looking for
+      // then this is the closest line to the instruction offset we are looking
+      // for
+      return line->line;
+    } else {
+      start = mid + 1;
+    }
+  }
 }

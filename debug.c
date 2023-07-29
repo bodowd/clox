@@ -6,7 +6,7 @@
 
 void disassembleChunk(Chunk *chunk, const char *name) {
   printf("== %s ==\n", name);
-
+  printf("chunk-count: %d\n", chunk->count);
   for (int offset = 0; offset < chunk->count;) {
     // instead of incrementing offset in the loop, we let
     // disassembleInstruction do it for us by it returning the offset of the
@@ -34,6 +34,19 @@ static int constantInstruction(const char *name, Chunk *chunk, int offset) {
   return offset + 2;
 }
 
+// disassemble the long instruction from multiple bytes and back to 4 bytes (32
+// bits)
+static int longConstantInstruction(const char *name, Chunk *chunk, int offset) {
+  // at offset, that's the opcode OP_CONSTANT_LONG
+  // offset+1 is where the long constant begins
+  uint32_t constant = chunk->code[offset + 1] | (chunk->code[offset + 2] << 8) |
+                      (chunk->code[offset + 3] << 16);
+
+  printf("instruction: %s...index-of-constant: %d...", name, constant);
+  printValue(chunk->constants.values[constant]);
+  return offset + 4;
+}
+
 int disassembleInstruction(Chunk *chunk, int offset) {
   // print the byte offset of the given instruction
   // indicates where in the chunk this instruction is
@@ -55,6 +68,8 @@ int disassembleInstruction(Chunk *chunk, int offset) {
     return constantInstruction("OP_CONSTANT", chunk, offset);
   case OP_RETURN:
     return simpleInstruction("OP_RETURN", offset);
+  case OP_CONSTANT_LONG:
+    return longConstantInstruction("OP_CONSTANT_LONG", chunk, offset);
   default:
     printf("Unknown opcode %d\n", instruction);
     return offset + 1;

@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "chunk.h"
@@ -99,5 +100,43 @@ int getLine(Chunk *chunk, int offset) {
     } else {
       start = mid + 1;
     }
+  }
+}
+
+// writes either OP_CONSTANT or OP_CONSTANT_LONG depending on the size of the
+// value
+// because OP_CONSTANT only uses a single byte for its operand, a chunk could
+// only contain up to 256 different constants (2^8)
+// here we have another operand if we get past 256 constants
+// it stores the operand as a 24-bit number so we have plenty of room for many
+// constants
+void writeConstant(Chunk *chunk, Value value, int line) {
+  // add the constant to the array and get the index back
+  // if the index fits in one byte, use the short opcode
+  // otherwise, use the long opcode
+  // when using the long opcode, need to split the value into multiple bytes
+  // to split into multiple bytes, we need to pick an endianness -- here we
+  // just go with little-endian as x86 does
+  int index = addConstant(chunk, value);
+  if (index < 256) {
+    writeChunk(chunk, OP_CONSTANT, line);
+    writeChunk(chunk, (uint8_t)index, line);
+  } else {
+    // each writeChunk will write to the next index in chunk->code array
+    writeChunk(chunk, OP_CONSTANT_LONG, line);
+    printf("chunk-count: %d", chunk->count);
+    // lowest order byte gets written first -- because we & with 0xff (255),
+    // we get the first lower order bytes want to & because we then mask all
+    // the higher order bytes
+
+    // then we right shift the number by a byte to drop the lower order first
+    // byte and then & with 255 to get the bits that are turned on there
+    // and so on to the next byte
+    writeChunk(chunk, (uint8_t)(index & 0xff), line);
+    printf("chunk-count: %d", chunk->count);
+    writeChunk(chunk, (uint8_t)((index >> 8) & 0xff), line);
+    printf("chunk-count: %d", chunk->count);
+    writeChunk(chunk, (uint8_t)((index >> 16) & 0xff), line);
+    printf("chunk-count: %d", chunk->count);
   }
 }

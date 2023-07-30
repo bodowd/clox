@@ -17,7 +17,6 @@ void disassembleChunk(Chunk *chunk, const char *name) {
 }
 
 static int simpleInstruction(const char *name, int offset) {
-  printf("instruction: %s\n", name);
   return offset + 1;
 }
 
@@ -26,9 +25,8 @@ static int constantInstruction(const char *name, Chunk *chunk, int offset) {
       chunk->code[offset + 1]; // pull out the constant index from the
                                // subsequent byte in the chunk -- the index in
                                // array of constants.values
-  printf("instruction: %s...index-of-constant: %d...", name, constant);
   // look up the actual constant value
-  printValue(chunk->constants.values[constant]);
+  // printValue(chunk->constants.values[constant]);
   // return the offset of the beginning of the NEXT instruction -- OP_CONSTANT
   // is two bytes; one for the opcode and one for the operand
   return offset + 2;
@@ -42,8 +40,7 @@ static int longConstantInstruction(const char *name, Chunk *chunk, int offset) {
   uint32_t constant = chunk->code[offset + 1] | (chunk->code[offset + 2] << 8) |
                       (chunk->code[offset + 3] << 16);
 
-  printf("instruction: %s...index-of-constant: %d...", name, constant);
-  printValue(chunk->constants.values[constant]);
+  // printValue(chunk->constants.values[constant]);
   return offset + 4;
 }
 
@@ -52,7 +49,6 @@ int disassembleInstruction(Chunk *chunk, int offset) {
   // indicates where in the chunk this instruction is
   printf("offset: %04d...", offset);
   int line = getLine(chunk, offset);
-
   if (offset > 0 && line == getLine(chunk, offset - 1)) {
     // we show | for any instruction that comes from the same source line as the
     // preceding one
@@ -66,10 +62,20 @@ int disassembleInstruction(Chunk *chunk, int offset) {
   switch (instruction) {
   case OP_CONSTANT:
     return constantInstruction("OP_CONSTANT", chunk, offset);
+  case OP_ADD:
+    return simpleInstruction("OP_ADD", offset);
+  case OP_SUBTRACT:
+    return simpleInstruction("OP_SUBTRACT", offset);
+  case OP_MULTIPLY:
+    return simpleInstruction("OP_MULTIPLY", offset);
+  case OP_DIVIDE:
+    return simpleInstruction("OP_DIVIDE", offset);
   case OP_RETURN:
     return simpleInstruction("OP_RETURN", offset);
   case OP_CONSTANT_LONG:
     return longConstantInstruction("OP_CONSTANT_LONG", chunk, offset);
+  case OP_NEGATE:
+    return simpleInstruction("OP_NEGATE", offset);
   default:
     printf("Unknown opcode %d\n", instruction);
     return offset + 1;

@@ -1,11 +1,12 @@
 #include "vm.h"
 #include "chunk.h"
 #include "common.h"
+#include "compiler.h"
 #include "debug.h"
 #include <stdint.h>
 #include <stdio.h>
 
-// declaure a global VM object instead of passing a pointer to the VM to all the
+// declare a global VM object instead of passing a pointer to the VM to all the
 // functions. We only need one anyway
 VM vm;
 
@@ -122,16 +123,7 @@ static InterpretResult run() {
 #undef BINARY_OP
 }
 
-InterpretResult interpret(Chunk *chunk) {
-  // store the chunk being executed in the VM
-  vm.chunk = chunk;
-  // as the VM works through the bytecode, it keeps track of where it is -- the
-  // location of the instruction currently being executed
-  // we don't use a local variable inside run() for this because eventually
-  // other functions will need to access it instead we store it as a field in VM
-  // the ip always points to the next instruction, not the one currently being
-  // handled, so we point it to the first byte of code in the chunk when we
-  // start interpreting
-  vm.ip = vm.chunk->code;
-  return run();
+InterpretResult interpret(const char *source) {
+  compile(source);
+  return INTERPRET_OK;
 }

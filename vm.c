@@ -3,6 +3,8 @@
 #include "common.h"
 #include "compiler.h"
 #include "debug.h"
+#include "value.h"
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -11,6 +13,24 @@
 VM vm;
 
 static void resetStack() { vm.stackTop = vm.stack; }
+
+static void runtimeError(const char *format, ...) {
+  // va_list and the ... let us pass an arbitrary number of arguments to this
+  // function
+  va_list args;
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  fputs("\n", stderr);
+
+  // the interpreter advances past each instruction before executing it. So to
+  // find the failing line we need to look into the current bytecode instruction
+  // index minus one
+  size_t instruction = vm.ip - vm.chunk->code - 1;
+  int line = vm.chunk->lines[instruction].line;
+  fprintf(stderr, "[line %d] in script\n", line);
+  resetStack();
+}
 
 void initVM() { resetStack(); }
 
@@ -22,11 +42,16 @@ void push(Value value) {
 }
 
 Value pop() {
-  // move from one slot past the last item to the last item and then return that
-  // item
+  // move from one slot past the last item to the last item and then return
+  // that item
   vm.stackTop--;
   return *vm.stackTop;
 }
+
+// return a Value from the top of the stack but doesn't pop it
+// distance is how far down from the top of the stack to look: zero is the top,
+// 1 is one slot down, etc
+static Value peek(int distance) { return vm.stackTop[-1 - distance]; }
 
 static InterpretResult run() {
 // these macros are only used in run, so we define them in run()
@@ -52,17 +77,21 @@ static InterpretResult run() {
 // pop 1
 // pop 3
 // push (3-1)
-#define BINARY_OP(op)                                                          \
+#define BINARY_OP(valueType, op)                                               \
   do {                                                                         \
-    double b = pop();                                                          \
-    double a = pop();                                                          \
-    push(a op b);                                                              \
+    if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {                          \
+      runtimeError("Operands must be numbers.");                               \
+      return INTERPRET_RUNTIME_ERROR;                                          \
+    }                                                                          \
+    double b = AS_NUMBER(pop());                                               \
+    double a = AS_NUMBER(pop());                                               \
+    push(valueType(a op b));                                                   \
   } while (false)
 
   for (;;) {
     // a flag for us to get some diagnostic logging
-    // when the flag is defined, the VM disassembles and prints each instruction
-    // right before executing it
+    // when the flag is defined, the VM disassembles and prints each
+    // instruction right before executing it
 #ifdef DEBUG_TRACE_EXECUTION
     printf("             ");
     for (Value *slot = vm.stack; slot < vm.stackTop; slot++) {
@@ -73,10 +102,9 @@ static InterpretResult run() {
     printf("\n");
     // since disassembleInstruction() takes an integer byte offset
     // and we store the current instruction reference as a direct pointer,
-    // we need to convert ip back to a relative offset from the beginning of the
-    // bytecode
-    // so we take the pointer and subtract it from the pointer where the first
-    // byte is to get the offset
+    // we need to convert ip back to a relative offset from the beginning of
+    // the bytecode so we take the pointer and subtract it from the pointer
+    // where the first byte is to get the offset
     disassembleInstruction(vm.chunk, (int)(vm.ip - vm.chunk->code));
 #endif
     uint8_t instruction;
@@ -88,26 +116,32 @@ static InterpretResult run() {
     }
 
     case OP_ADD:
-      BINARY_OP(+);
+      BINARY_OP(NUMBER_VAL, +);
       break;
 
     case OP_SUBTRACT:
-      BINARY_OP(-);
+      BINARY_OP(NUMBER_VAL, -);
       break;
 
     case OP_MULTIPLY:
-      BINARY_OP(*);
+      BINARY_OP(NUMBER_VAL, *);
       break;
 
     case OP_DIVIDE:
-      BINARY_OP(/);
+      BINARY_OP(NUMBER_VAL, /);
       break;
 
     case OP_NEGATE:
+      // first check if the Value on top of the stack is a number
+      if (!IS_NUMBER(peek(0))) {
+        runtimeError("Operand must be a number.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
       // get the value to operate on with the pop
       // negate the value
       // push it back onto the stack for later instructions
-      push(-pop());
+      push(NUMBER_VAL(-AS_NUMBER(pop())));
       break;
 
     case OP_RETURN: {

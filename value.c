@@ -25,4 +25,6 @@ void freeValueArray(ValueArray *array) {
   initValueArray(array);
 }
 
-void printValue(Value value) { printf("value-of-constant: '%g'", value); }
+void printValue(Value value) {
+  printf("value-of-constant: '%g'", AS_NUMBER(value));
+}
